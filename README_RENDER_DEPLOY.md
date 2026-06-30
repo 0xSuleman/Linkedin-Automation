@@ -9,14 +9,20 @@ This deploys a hosted n8n instance on Render and then imports the LinkedIn autom
 - Public HTTPS URL for approval links and OAuth callbacks
 - `GEMINI_API_KEY` stored as a Render environment variable, not inside the workflow JSON
 
-## Important Cost/Reliability Note
+## Important Free-Tier Reliability Note
 
 The included `render.yaml` uses:
 
-- Web service plan: `standard`
-- Postgres plan: `basic-256mb`
+- Web service plan: `free`
+- Postgres plan: `free`
 
-This is intentional. A sleeping/free web service can miss scheduled n8n executions, and free Postgres is not suitable for long-term automation. Use free only for a short test. Render's n8n guide recommends `standard` or larger for the n8n web service and `basic-256mb` for the database.
+This deploys without paid Render resources, but it is not a permanent reliable production setup:
+
+- Render free web services spin down after 15 minutes without inbound traffic.
+- If n8n is asleep at 8 AM, the internal n8n schedule can be missed.
+- Render free Postgres databases expire after 30 days.
+
+For free testing, this is fine. For reliable daily automation, move the web service to a paid always-on plan and Postgres to a paid database.
 
 ## Files To Push
 
@@ -125,10 +131,18 @@ Your local n8n credentials do not automatically exist on Render. Reconnect them 
 5. Approve the test post.
 6. Publish/activate the workflow so the 8 AM schedule runs automatically.
 
+## Free Automation Checklist
+
+- Deploy the Blueprint.
+- Set `GEMINI_API_KEY`.
+- Reconnect Google, Gmail, and LinkedIn credentials.
+- Import and activate the workflow.
+- Use an external free uptime ping service to hit your Render n8n URL before 8 AM, or every 10-12 minutes, if you want the free service to stay awake.
+
 ## Production Checklist
 
-- Render service is `standard` or higher.
-- Render Postgres is paid, not free.
+- Render service is paid/always-on.
+- Render Postgres is paid, not free-expiring.
 - `WEBHOOK_URL` uses the real Render HTTPS URL.
 - Gemini key is set in Render env vars.
 - Google and LinkedIn OAuth redirect URLs use the Render callback URL.

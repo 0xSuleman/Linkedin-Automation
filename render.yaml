@@ -5,7 +5,7 @@ services:
     image:
       url: docker.io/n8nio/n8n:2.27.5
     region: oregon
-    plan: standard
+    plan: free
     envVars:
       - key: N8N_ENCRYPTION_KEY
         generateValue: true
@@ -69,5 +69,4 @@ services:
 databases:
   - name: suleman-linkedin-n8n-db
     region: oregon
-    plan: basic-256mb
-    diskSizeGB: 5
+    plan: free
