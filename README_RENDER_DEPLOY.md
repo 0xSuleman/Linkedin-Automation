@@ -137,7 +137,16 @@ Your local n8n credentials do not automatically exist on Render. Reconnect them 
 - Set `GEMINI_API_KEY`.
 - Reconnect Google, Gmail, and LinkedIn credentials.
 - Import and activate the workflow.
-- Use an external free uptime ping service to hit your Render n8n URL before 8 AM, or every 10-12 minutes, if you want the free service to stay awake.
+- The repo includes `.github/workflows/keep-render-awake.yml`, which pings n8n every 10 minutes and again at 7:50 AM Asia/Karachi.
+- If your Render service URL is not `https://suleman-linkedin-n8n.onrender.com`, set this GitHub repository variable:
+
+```text
+RENDER_N8N_URL=https://your-real-render-host.onrender.com
+```
+
+Add it in GitHub: `Settings` -> `Secrets and variables` -> `Actions` -> `Variables` -> `New repository variable`.
+
+This workaround is best-effort. GitHub scheduled workflows can occasionally run late, and Render can still cold-start slowly.
 
 ## Production Checklist
 

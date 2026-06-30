@@ -1,0 +1,58 @@
+name: Keep Render n8n Awake
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Render free web services sleep after inactivity. This ping creates
+    # inbound traffic often enough to keep the free n8n service warm.
+    - cron: "*/10 * * * *"
+    # Extra wake-up before the 8:00 AM Asia/Karachi n8n schedule.
+    # 7:50 AM PKT = 2:50 AM UTC.
+    - cron: "50 2 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keep-render-n8n-awake
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Ping n8n readiness endpoint
+        env:
+          N8N_URL: ${{ vars.RENDER_N8N_URL || 'https://suleman-linkedin-n8n.onrender.com' }}
+        run: |
+          set -euo pipefail
+
+          base="${N8N_URL%/}"
+          readiness_url="${base}/healthz/readiness"
+          health_url="${base}/healthz"
+
+          echo "Pinging ${readiness_url}"
+
+          for attempt in 1 2 3 4 5; do
+            code="$(curl -L -sS -o /tmp/n8n-health.txt -w '%{http_code}' --max-time 60 "${readiness_url}" || true)"
+            echo "Readiness attempt ${attempt}: HTTP ${code}"
+
+            if [ "${code}" = "200" ]; then
+              echo "n8n is awake and DB-ready."
+              exit 0
+            fi
+
+            # A sleeping Render service can need a little time to boot.
+            sleep 45
+          done
+
+          echo "Readiness did not return 200. Falling back to ${health_url}"
+          code="$(curl -L -sS -o /tmp/n8n-health.txt -w '%{http_code}' --max-time 60 "${health_url}" || true)"
+          echo "Health fallback: HTTP ${code}"
+
+          if [ "${code}" != "200" ]; then
+            echo "n8n health check failed. Response body:"
+            cat /tmp/n8n-health.txt || true
+            exit 1
+          fi
