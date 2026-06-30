@@ -1,0 +1,73 @@
+services:
+  - type: web
+    name: suleman-linkedin-n8n
+    runtime: image
+    image:
+      url: docker.io/n8nio/n8n:2.27.5
+    region: oregon
+    plan: standard
+    envVars:
+      - key: N8N_ENCRYPTION_KEY
+        generateValue: true
+      - key: DB_TYPE
+        value: postgresdb
+      - key: DB_POSTGRESDB_DATABASE
+        fromDatabase:
+          name: suleman-linkedin-n8n-db
+          property: database
+      - key: DB_POSTGRESDB_HOST
+        fromDatabase:
+          name: suleman-linkedin-n8n-db
+          property: host
+      - key: DB_POSTGRESDB_PASSWORD
+        fromDatabase:
+          name: suleman-linkedin-n8n-db
+          property: password
+      - key: DB_POSTGRESDB_USER
+        fromDatabase:
+          name: suleman-linkedin-n8n-db
+          property: user
+      - key: DB_POSTGRESDB_PORT
+        fromDatabase:
+          name: suleman-linkedin-n8n-db
+          property: port
+      - key: N8N_HOST
+        value: suleman-linkedin-n8n.onrender.com
+      - key: N8N_PROTOCOL
+        value: https
+      - key: PORT
+        value: "5678"
+      - key: N8N_PORT
+        value: "5678"
+      - key: N8N_EDITOR_BASE_URL
+        value: https://suleman-linkedin-n8n.onrender.com
+      - key: WEBHOOK_URL
+        value: https://suleman-linkedin-n8n.onrender.com/
+      - key: N8N_LISTEN_ADDRESS
+        value: 0.0.0.0
+      - key: N8N_PROXY_HOPS
+        value: "1"
+      - key: N8N_RUNNERS_ENABLED
+        value: "true"
+      - key: GENERIC_TIMEZONE
+        value: Asia/Karachi
+      - key: TZ
+        value: Asia/Karachi
+      - key: EXECUTIONS_DATA_PRUNE
+        value: "true"
+      - key: EXECUTIONS_DATA_MAX_AGE
+        value: "336"
+      - key: EXECUTIONS_DATA_PRUNE_MAX_COUNT
+        value: "1000"
+      - key: N8N_DIAGNOSTICS_ENABLED
+        value: "false"
+      - key: N8N_PERSONALIZATION_ENABLED
+        value: "false"
+      - key: GEMINI_API_KEY
+        sync: false
+
+databases:
+  - name: suleman-linkedin-n8n-db
+    region: oregon
+    plan: basic-256mb
+    diskSizeGB: 5

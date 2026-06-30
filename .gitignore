@@ -1,0 +1,9 @@
+Credentials.txt
+.env
+.env.*
+.n8n/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.log
+node_modules/

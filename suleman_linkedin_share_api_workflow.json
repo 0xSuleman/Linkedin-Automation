@@ -1,0 +1,1042 @@
+{
+  "name": "Suleman's Linkedin Automation - Sheet Image URL REST",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "e25e59e4-344b-49d8-9ad3-47788bbfd5ae",
+      "name": "Every day 8 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2920,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1zyIx4cO8rmxEeYImZQjpUg78KSYqcMpWeWf6r30L15c",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1zyIx4cO8rmxEeYImZQjpUg78KSYqcMpWeWf6r30L15c/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 2146447448,
+          "mode": "list",
+          "cachedResultName": "Sheet1.csv",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1zyIx4cO8rmxEeYImZQjpUg78KSYqcMpWeWf6r30L15c/edit#gid=2146447448"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Status",
+              "lookupValue": "Pending"
+            }
+          ]
+        },
+        "options": {
+          "returnFirstMatch": false
+        }
+      },
+      "id": "9582b03a-e53e-417c-8e30-93e20ee2b37f",
+      "name": "Read pending topic",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -2680,
+        640
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "MxM116T8N9rKglKu",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 10000
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all();\nconst normalized = rows.map((item, index) => {\n  const json = item.json || {};\n  const topic = String(json.Topic || json.topic || '').trim();\n  const description = String(json.Description || json.description || '').trim();\n  const imageUrl = String(json.Image || json.image || json['Image URL'] || json.image_url || '').trim();\n  const status = String(json.Status || json.status || '').trim().toLowerCase();\n  const rowNumber = json.row_number || json.__rowNumber || json.rowIndex || json.row_index;\n  return { item, index, json, topic, description, imageUrl, status, rowNumber };\n});\n\nconst picked = normalized.find(row => {\n  if (!row.topic || !row.imageUrl) return false;\n  if (['posted', 'skipped', 'error', 'failed'].includes(row.status)) return false;\n  return true;\n});\n\nif (!picked) {\n  const withMissingImage = normalized.filter(row => row.topic && !row.imageUrl && !['posted', 'skipped', 'error', 'failed'].includes(row.status)).length;\n  throw new Error(`No usable pending rows found. Add Topic + a public direct Image URL to at least one row. Pending rows missing Image: ${withMissingImage}.`);\n}\n\nif (!/^https?:\\/\\//i.test(picked.imageUrl)) {\n  throw new Error(`Image URL for \"${picked.topic}\" must start with http:// or https://. Got: ${picked.imageUrl}`);\n}\n\nreturn [{\n  json: {\n    ...picked.json,\n    Topic: picked.topic,\n    Description: picked.description,\n    Image: picked.imageUrl,\n    row_number: picked.rowNumber,\n    source_row_index: picked.index + 1\n  },\n  binary: picked.item.binary\n}];"
+      },
+      "id": "ffa8659c-ef59-4caf-9ae9-8e043e1bb2aa",
+      "name": "Take first pending row with image",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2440,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $input.first().json;\n  const topic = String(row.Topic || row.topic || '').trim();\n  const description = String(row.Description || row.description || '').trim();\n  const imageUrl = String(row.Image || row.image || row['Image URL'] || row.image_url || '').trim();\n  const rowNumber = row.row_number || row.__rowNumber || row.rowIndex || row.row_index;\n\n  if (!topic) throw new Error('Google Sheet row is missing Topic.');\n  if (!imageUrl) throw new Error(`Google Sheet row for \"${topic}\" is missing Image URL. Add a public direct image URL in the Image column.`);\n  if (!/^https?:\\/\\//i.test(imageUrl)) throw new Error(`Image URL for \"${topic}\" must start with http:// or https://. Got: ${imageUrl}`);\n\n  const prompt = [\n    'You are a system design educator posting on LinkedIn.',\n    `Topic: ${topic}`,\n    `Description: ${description}`,\n    '',\n    'Write one complete LinkedIn post between 900 and 2200 characters.',\n    '- Start with a strong hook on the first line. Do not use Markdown symbols like ** or __.',\n    '- Use clear comparisons with emojis as visual anchors.',\n    '- Explain trade-offs simply for backend/system-design learners.',\n    '- Keep the wording practical, clear, and comment-worthy.',\n    '- Do not stop mid-section; every comparison you introduce must include its full explanation.',\n    '- End with one question that drives comments.',\n    '- Do not generate an image prompt or image description.',\n    '',\n    'Return ONLY valid JSON. No markdown fences. No commentary outside JSON.',\n    'JSON schema:',\n    '{ \"post_text\": \"Complete LinkedIn caption\" }'\n  ].join('\\n');\n\n  return [{\n    json: {\n      ...row,\n      row_number: rowNumber,\n      topic,\n      description,\n      image_url: imageUrl,\n      prompt,\n      requestBody: {\n        contents: [{ role: 'user', parts: [{ text: prompt }] }],\n        generationConfig: { temperature: 0.75, responseMimeType: 'application/json' }\n      }\n    }\n  }];"
+      },
+      "id": "83b741af-4bd2-483d-bc29-0a25508e7516",
+      "name": "Build Gemini post request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2200,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-goog-api-key",
+              "value": "={{ $env.GEMINI_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "49733996-79c7-4fb3-add5-85396898d4e1",
+      "name": "Gemini - generate post text",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1960,
+        640
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 15000
+    },
+    {
+      "parameters": {
+        "jsCode": "const gemini = $input.first().json;\nconst source = $('Build Gemini post request').first().json;\n\nfunction extractTextFromGemini(value) {\n  if (value?.candidates?.[0]?.content?.parts) {\n    return value.candidates[0].content.parts.map(part => part.text || '').join('');\n  }\n  if (typeof value?.text === 'string') return value.text;\n  if (typeof value?.post_text === 'string') return JSON.stringify(value);\n  return JSON.stringify(value);\n}\n\nfunction stripJsonFence(value) {\n  return String(value || '')\n    .trim()\n    .replace(/^\\uFEFF/, '')\n    .replace(/^```(?:json)?\\s*/i, '')\n    .replace(/\\s*```$/i, '')\n    .trim();\n}\n\nfunction parseJsonObject(raw) {\n  const text = stripJsonFence(raw);\n  try { return JSON.parse(text); } catch (_) {}\n\n  const firstBrace = text.indexOf('{');\n  const lastBrace = text.lastIndexOf('}');\n  if (firstBrace !== -1 && lastBrace > firstBrace) {\n    const candidate = text.slice(firstBrace, lastBrace + 1);\n    try { return JSON.parse(candidate); } catch (_) {}\n  }\n\n  if (text.length >= 80) return { post_text: text };\n  throw new Error('Gemini did not return usable post text. Raw output: ' + text.slice(0, 1000));\n}\n\nfunction cleanPostText(value) {\n  return String(value || '')\n    .replace(/\\r\\n/g, '\\n')\n    .replace(/[\\u200B-\\u200D\\uFEFF]/g, '')\n    .replace(/[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]/g, '')\n    .replace(/^```[a-z]*\\n?/i, '')\n    .replace(/```$/i, '')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n}\n\nconst parsed = parseJsonObject(extractTextFromGemini(gemini));\nlet postText = cleanPostText(parsed.post_text || parsed.postText || parsed.caption || parsed.text || '');\n\nif (postText.length < 120) {\n  postText = `${source.topic}: the system-design trade-off most teams miss\\n\\nGreat architecture is rarely about one perfect tool. It is about choosing the right balance between latency, consistency, cost, and operational complexity.\\n\\nWhich trade-off would you choose first?`;\n}\n\nif (!/\\?\\s*(?:#[A-Za-z0-9_]+\\s*)*$/.test(postText)) {\n  postText = postText.replace(/\\s+$/, '') + '\\n\\nWhat trade-off would you choose first?';\n}\n\nconst emergencyLinkedInCap = 2800;\nif (postText.length > emergencyLinkedInCap) {\n  const questions = postText.match(/[^\\n.!?]*\\?/g) || [];\n  const question = cleanPostText(questions[questions.length - 1] || 'What trade-off would you choose first?');\n  const room = emergencyLinkedInCap - question.length - 2;\n  postText = postText.slice(0, room).replace(/\\n[^\\n]*$/, '').trim();\n  postText += '\\n\\n' + question;\n}\n\nreturn [{\n  json: {\n    topic: source.topic,\n    description: source.description,\n    image_url: source.image_url,\n    row_number: source.row_number,\n    post_text: postText,\n    post_text_length: postText.length,\n    image_alt_text: `${source.topic} - system design infographic`.slice(0, 120)\n  }\n}];"
+      },
+      "id": "a5f50fa6-1a22-478f-8113-920d1975967d",
+      "name": "Parse Gemini post text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1720,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.image_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 n8n LinkedIn image downloader"
+            },
+            {
+              "name": "Accept",
+              "value": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 300000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 10
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "image"
+            }
+          }
+        }
+      },
+      "id": "893c62e5-0dc3-4d22-bb80-b5b2601f5f50",
+      "name": "Download sheet image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1480,
+        640
+      ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 10000
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst image = item.binary?.image;\nif (!image) throw new Error('Image download did not produce binary field named \"image\". Check that the Image column contains a direct public image URL.');\n\nconst mimeType = String(image.mimeType || 'application/octet-stream').toLowerCase();\nif (!mimeType.startsWith('image/')) {\n  throw new Error(`Downloaded URL did not return an image MIME type. Got ${mimeType} from ${item.json.image_url}`);\n}\nif (!/image\\/(jpeg|jpg|png)/i.test(mimeType)) {\n  throw new Error(`LinkedIn image upload in this workflow accepts JPG or PNG only. Got ${mimeType} from ${item.json.image_url}. Replace the sheet Image URL with a direct JPG/PNG URL.`);\n}\n\nconst rawSize = image.fileSize || image.fileSizeBytes || image.dataSize || image.fileSizeBytesString;\nconst sizeBytes = Number(String(rawSize || '').replace(/[^0-9]/g, '')) || undefined;\nconst maxBytes = 10 * 1024 * 1024;\nif (sizeBytes && sizeBytes > maxBytes) {\n  throw new Error(`Downloaded image is too large for reliable LinkedIn upload (${sizeBytes} bytes). Use a JPG/PNG under 10MB.`);\n}\n\nconst safeTopic = String(item.json.topic || 'linkedin-image').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'linkedin-image';\nconst ext = mimeType.includes('png') ? 'png' : 'jpg';\nimage.fileName = image.fileName || `${safeTopic}.${ext}`;\nimage.mimeType = mimeType.includes('png') ? 'image/png' : 'image/jpeg';\n\nreturn [{\n  json: {\n    ...item.json,\n    image_mime_type: image.mimeType,\n    image_file_name: image.fileName,\n    image_size_bytes: sizeBytes,\n  },\n  binary: { image }\n}];"
+      },
+      "id": "cfe7568a-13a0-4c1b-bb68-ee68781b81f3",
+      "name": "Prepare downloaded image",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1240,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "zsuleman437@gmail.com",
+        "subject": "=Approve LinkedIn post: {{ $json.topic }}",
+        "message": "=<h2>LinkedIn post approval</h2><p><b>Topic:</b> {{ $json.topic }}</p><p><b>Image URL:</b> <a href='{{ $json.image_url }}'>Open source image</a></p><p><b>Image type:</b> {{ $json.image_mime_type }}</p><hr><pre style='font-family:Arial,sans-serif;white-space:pre-wrap;font-size:14px'>{{ $json.post_text }}</pre><hr><p>The downloaded sheet image is attached and will be uploaded to LinkedIn after approval.</p><p><a href='{{ $execution.resumeUrl }}&action=approve' style='background:#0a66c2;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:700'>Approve & Post</a> &nbsp; <a href='{{ $execution.resumeUrl }}&action=skip' style='color:#555'>Skip</a></p>",
+        "options": {
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {
+                "property": "image"
+              }
+            ]
+          }
+        }
+      },
+      "id": "9a99a41b-9c27-46ee-a586-c34665f1ef8a",
+      "name": "Email approval preview",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -1000,
+        640
+      ],
+      "webhookId": "a0b9e4db-c0d3-4afe-95cb-b456dca0a58b",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "1OEfXBt3O6zIlqi2",
+          "name": "Gmail account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 10000
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {
+          "responseData": "={{ { status: 'received' } }}"
+        }
+      },
+      "id": "770804bf-e76f-43f7-b83a-e164bfd59d2d",
+      "name": "Wait for approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -760,
+        640
+      ],
+      "webhookId": "b4f05b05-ba42-4ddd-9d13-4cf9d0c33540"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.action }}",
+              "value2": "approve"
+            }
+          ]
+        }
+      },
+      "id": "f4334801-4a6a-4697-a8a1-0389c68218e1",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -520,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.linkedin.com/v2/userinfo",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "9ec76b86-40ff-43a2-a722-7c8c0bfec4fe",
+      "name": "LinkedIn - get authenticated profile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -400,
+        512
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "Qi2ow6xlK8bL7DC5",
+          "name": "Linkedin"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 10000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/rest/images?action=initializeUpload",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "LinkedIn-Version",
+              "value": "202606"
+            },
+            {
+              "name": "X-Restli-Protocol-Version",
+              "value": "2.0.0"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { initializeUploadRequest: { owner: $('Validate LinkedIn profile').first().json.linkedin_author } } }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "0ce73ee1-ed74-427a-9b24-f9d6752fb664",
+      "name": "LinkedIn - initialize image upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -160,
+        512
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "Qi2ow6xlK8bL7DC5",
+          "name": "Linkedin"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 10000
+    },
+    {
+      "parameters": {
+        "jsCode": "const reg = $input.first().json;\nconst original = $('Prepare downloaded image').first();\nconst uploadUrl = reg.value?.uploadUrl || reg.uploadUrl;\nconst asset = reg.value?.image || reg.image;\nif (!uploadUrl || !/^https?:\\/\\//i.test(uploadUrl)) {\n  throw new Error('LinkedIn initializeUpload did not return a valid uploadUrl: ' + JSON.stringify(reg));\n}\nif (!asset || !String(asset).startsWith('urn:li:image:')) {\n  throw new Error('LinkedIn initializeUpload did not return a valid image URN: ' + JSON.stringify(reg));\n}\nif (!original.binary?.image) {\n  throw new Error('Downloaded image binary was lost before LinkedIn upload. Expected binary field \"image\".');\n}\n\nconst escapeLinkedInLittleText = (value) => String(value || '')\n  .replace(/\\\\/g, '\\\\\\\\')\n  .replace(/[|{}@\\[\\]()<>#*_~]/g, '\\\\$&');\n\nconst rawCommentary = String(original.json.post_text || '').trim();\nconst linkedinCommentary = escapeLinkedInLittleText(rawCommentary);\nif (!rawCommentary) throw new Error('Post text is empty before LinkedIn publish.');\nif (linkedinCommentary.length > 3000) throw new Error(`Escaped LinkedIn commentary is unexpectedly long (${linkedinCommentary.length} chars). Shorten the generated text.`);\n\nreturn [{\n  json: {\n    ...original.json,\n    linkedin_commentary: linkedinCommentary,\n    linkedin_commentary_length: linkedinCommentary.length,\n    uploadUrl,\n    asset\n  },\n  binary: { image: original.binary.image }\n}];"
+      },
+      "id": "de9a4e88-ed35-426a-823b-09d9872a2168",
+      "name": "Prepare LinkedIn image upload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -40,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $json.uploadUrl }}",
+        "authentication": "genericCredentialType",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "={{ $json.image_mime_type || \"image/jpeg\" }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "image",
+        "options": {
+          "timeout": 300000
+        },
+        "genericAuthType": "oAuth2Api"
+      },
+      "id": "cc9dd27e-2bc0-44c1-8481-43dd0c65fcc6",
+      "name": "LinkedIn - upload image binary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        512
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "Qi2ow6xlK8bL7DC5",
+          "name": "Linkedin"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 15000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/rest/posts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "LinkedIn-Version",
+              "value": "202606"
+            },
+            {
+              "name": "X-Restli-Protocol-Version",
+              "value": "2.0.0"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ author: $('Validate LinkedIn profile').first().json.linkedin_author, commentary: $('Prepare LinkedIn image upload').first().json.linkedin_commentary, visibility: 'PUBLIC', distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] }, content: { media: { title: $('Prepare LinkedIn image upload').first().json.topic, altText: $('Prepare LinkedIn image upload').first().json.image_alt_text, id: $('Prepare LinkedIn image upload').first().json.asset } }, lifecycleState: 'PUBLISHED', isReshareDisabledByAuthor: false }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "8e66056c-da0f-4b3e-99fd-722f7e555651",
+      "name": "LinkedIn - publish image post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        512
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "Qi2ow6xlK8bL7DC5",
+          "name": "Linkedin"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 10000
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1zyIx4cO8rmxEeYImZQjpUg78KSYqcMpWeWf6r30L15c",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1zyIx4cO8rmxEeYImZQjpUg78KSYqcMpWeWf6r30L15c/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 2146447448,
+          "mode": "list",
+          "cachedResultName": "Sheet1.csv",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1zyIx4cO8rmxEeYImZQjpUg78KSYqcMpWeWf6r30L15c/edit#gid=2146447448"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('Prepare LinkedIn image upload').first().json.row_number }}",
+            "Status": "Posted",
+            "Post Text": "={{ $('Prepare LinkedIn image upload').first().json.post_text }}",
+            "Post Date": "={{ new Date().toISOString().slice(0,10) }}",
+            "LinkedIn Asset": "={{ $('Prepare LinkedIn image upload').first().json.asset }}",
+            "Topic": "={{ $('Take first pending row with image').first().json.Topic }}"
+          },
+          "matchingColumns": [
+            "Topic"
+          ],
+          "schema": [
+            {
+              "id": "Topic",
+              "displayName": "Topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Description",
+              "displayName": "Description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Image",
+              "displayName": "Image",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Post Text",
+              "displayName": "Post Text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Post Date",
+              "displayName": "Post Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "LinkedIn Asset",
+              "displayName": "LinkedIn Asset",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "8dbdd006-b181-42a8-adf5-11b0d90b96cf",
+      "name": "Mark as Posted",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        680,
+        512
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "MxM116T8N9rKglKu",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 10000
+    },
+    {
+      "parameters": {
+        "sendTo": "zsuleman437@gmail.com",
+        "subject": "Posted on LinkedIn: {{ $('Prepare LinkedIn image upload').first().json.topic }}",
+        "message": "Your LinkedIn post with the sheet image was published successfully.",
+        "options": {}
+      },
+      "id": "5d851f7b-9a6a-4f8c-87cc-26e68d8080b1",
+      "name": "Success email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        920,
+        512
+      ],
+      "webhookId": "69f39a77-bc6a-4cb6-b961-2124e4678c9b",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "1OEfXBt3O6zIlqi2",
+          "name": "Gmail account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 10000
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1zyIx4cO8rmxEeYImZQjpUg78KSYqcMpWeWf6r30L15c",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1zyIx4cO8rmxEeYImZQjpUg78KSYqcMpWeWf6r30L15c/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 2146447448,
+          "mode": "list",
+          "cachedResultName": "Sheet1.csv",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1zyIx4cO8rmxEeYImZQjpUg78KSYqcMpWeWf6r30L15c/edit#gid=2146447448"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Topic": "={{ $('Take first pending row with image').first().json.Topic }}",
+            "Status": "Skipped"
+          },
+          "matchingColumns": [
+            "Topic"
+          ],
+          "schema": [
+            {
+              "id": "Topic",
+              "displayName": "Topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Description",
+              "displayName": "Description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Image",
+              "displayName": "Image",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Post Text",
+              "displayName": "Post Text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Post Date",
+              "displayName": "Post Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "LinkedIn Asset",
+              "displayName": "LinkedIn Asset",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "ee753485-b037-4d13-bf63-c0df5e850b87",
+      "name": "Mark as Skipped",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -280,
+        800
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "MxM116T8N9rKglKu",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 10000
+    },
+    {
+      "parameters": {
+        "sendTo": "zsuleman437@gmail.com",
+        "subject": "Skipped LinkedIn post",
+        "message": "You skipped today's LinkedIn post. The Google Sheet row was marked as Skipped.",
+        "options": {}
+      },
+      "id": "d2a0126e-ad3d-461d-afd6-decbd1fd93a0",
+      "name": "Skip email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -40,
+        800
+      ],
+      "webhookId": "a0c9aa45-9eca-44af-9203-da2cc9c63705",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "1OEfXBt3O6zIlqi2",
+          "name": "Gmail account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 10000
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst query = item.json.query || {};\nconst action = String(query.action || item.json.action || '').trim().toLowerCase();\nif (!['approve', 'skip'].includes(action)) {\n  throw new Error(`Invalid approval action \"${action || '(empty)'}\". Use the Approve & Post or Skip link from the approval email.`);\n}\nreturn [{ json: { ...item.json, action }, binary: item.binary }];"
+      },
+      "id": "c4c18458-21b2-4b7f-bc5e-bd052d2770da",
+      "name": "Validate approval action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const profile = $input.first().json;\nconst sub = String(profile.sub || '').trim();\nif (!sub) {\n  throw new Error('LinkedIn /v2/userinfo did not return a profile sub. Reconnect the Linkedin OAuth credential with openid profile w_member_social scopes.');\n}\nconst author = `urn:li:person:${sub}`;\nreturn [{ json: { ...profile, linkedin_author: author } }];"
+      },
+      "id": "b7995eff-bb36-4d2c-b6f4-93c0764db0eb",
+      "name": "Validate LinkedIn profile",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -280,
+        512
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every day 8 AM": {
+      "main": [
+        [
+          {
+            "node": "Read pending topic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read pending topic": {
+      "main": [
+        [
+          {
+            "node": "Take first pending row with image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Gemini post request": {
+      "main": [
+        [
+          {
+            "node": "Gemini - generate post text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini - generate post text": {
+      "main": [
+        [
+          {
+            "node": "Parse Gemini post text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Gemini post text": {
+      "main": [
+        [
+          {
+            "node": "Download sheet image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download sheet image": {
+      "main": [
+        [
+          {
+            "node": "Prepare downloaded image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare downloaded image": {
+      "main": [
+        [
+          {
+            "node": "Email approval preview",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email approval preview": {
+      "main": [
+        [
+          {
+            "node": "Wait for approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for approval": {
+      "main": [
+        [
+          {
+            "node": "Validate approval action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "LinkedIn - get authenticated profile",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark as Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare LinkedIn image upload": {
+      "main": [
+        [
+          {
+            "node": "LinkedIn - upload image binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LinkedIn - upload image binary": {
+      "main": [
+        [
+          {
+            "node": "LinkedIn - publish image post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark as Posted": {
+      "main": [
+        [
+          {
+            "node": "Success email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark as Skipped": {
+      "main": [
+        [
+          {
+            "node": "Skip email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Take first pending row with image": {
+      "main": [
+        [
+          {
+            "node": "Build Gemini post request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LinkedIn - publish image post": {
+      "main": [
+        [
+          {
+            "node": "Mark as Posted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LinkedIn - initialize image upload": {
+      "main": [
+        [
+          {
+            "node": "Prepare LinkedIn image upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LinkedIn - get authenticated profile": {
+      "main": [
+        [
+          {
+            "node": "Validate LinkedIn profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate approval action": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate LinkedIn profile": {
+      "main": [
+        [
+          {
+            "node": "LinkedIn - initialize image upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "08bbf92bd98e6ba2ed2adeb7c4e0a40c29c753a0827efebdbeeab51b6527ad09"
+  },
+  "nodeGroups": [],
+  "tags": []
+}
