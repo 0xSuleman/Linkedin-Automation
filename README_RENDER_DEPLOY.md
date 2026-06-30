@@ -21,6 +21,7 @@ This deploys without paid Render resources, but it is not a permanent reliable p
 - Render free web services spin down after 15 minutes without inbound traffic.
 - If n8n is asleep at 8 AM, the internal n8n schedule can be missed.
 - Render free Postgres databases expire after 30 days.
+- The free web service has 512 MB RAM. The Blueprint sets `NODE_OPTIONS=--max-old-space-size=384` to reduce n8n startup crashes during migrations.
 
 For free testing, this is fine. For reliable daily automation, move the web service to a paid always-on plan and Postgres to a paid database.
 

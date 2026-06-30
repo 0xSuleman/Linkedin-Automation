@@ -47,8 +47,8 @@ services:
         value: 0.0.0.0
       - key: N8N_PROXY_HOPS
         value: "1"
-      - key: N8N_RUNNERS_ENABLED
-        value: "true"
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=384"
       - key: GENERIC_TIMEZONE
         value: Asia/Karachi
       - key: TZ

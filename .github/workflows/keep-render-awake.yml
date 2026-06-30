@@ -22,24 +22,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Ping n8n readiness endpoint
+      - name: Ping Render n8n service
         env:
           N8N_URL: ${{ vars.RENDER_N8N_URL || 'https://suleman-linkedin-n8n.onrender.com' }}
         run: |
           set -euo pipefail
 
           base="${N8N_URL%/}"
-          readiness_url="${base}/healthz/readiness"
-          health_url="${base}/healthz"
 
-          echo "Pinging ${readiness_url}"
+          echo "Pinging ${base}"
 
           for attempt in 1 2 3 4 5; do
-            code="$(curl -L -sS -o /tmp/n8n-health.txt -w '%{http_code}' --max-time 60 "${readiness_url}" || true)"
-            echo "Readiness attempt ${attempt}: HTTP ${code}"
+            code="$(curl -L -sS -o /tmp/n8n-ping.txt -w '%{http_code}' --max-time 60 "${base}" || true)"
+            echo "Ping attempt ${attempt}: HTTP ${code}"
 
-            if [ "${code}" = "200" ]; then
-              echo "n8n is awake and DB-ready."
+            if [ "${code}" -ge 200 ] && [ "${code}" -lt 500 ]; then
+              echo "Render service responded; keep-awake ping succeeded."
               exit 0
             fi
 
@@ -47,12 +45,6 @@ jobs:
             sleep 45
           done
 
-          echo "Readiness did not return 200. Falling back to ${health_url}"
-          code="$(curl -L -sS -o /tmp/n8n-health.txt -w '%{http_code}' --max-time 60 "${health_url}" || true)"
-          echo "Health fallback: HTTP ${code}"
-
-          if [ "${code}" != "200" ]; then
-            echo "n8n health check failed. Response body:"
-            cat /tmp/n8n-health.txt || true
-            exit 1
-          fi
+          echo "Render service did not return a usable response. Last response body:"
+          cat /tmp/n8n-ping.txt || true
+          exit 1
