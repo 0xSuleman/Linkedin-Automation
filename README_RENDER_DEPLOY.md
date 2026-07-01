@@ -19,7 +19,7 @@ The included `render.yaml` uses:
 This deploys without paid Render resources, but it is not a permanent reliable production setup:
 
 - Render free web services spin down after 15 minutes without inbound traffic.
-- If n8n is asleep at 8 AM, the internal n8n schedule can be missed.
+- If n8n is asleep at 8 AM, the internal n8n schedule can be missed. This repo avoids that by using a GitHub Actions scheduled webhook trigger.
 - Render free Postgres databases expire after 30 days.
 - The free web service has 512 MB RAM. The Blueprint sets `NODE_OPTIONS=--max-old-space-size=384` to reduce n8n startup crashes during migrations.
 
@@ -130,7 +130,15 @@ Your local n8n credentials do not automatically exist on Render. Reconnect them 
 3. Execute the workflow manually once.
 4. Confirm the approval email link starts with your Render URL, not `localhost`.
 5. Approve the test post.
-6. Publish/activate the workflow so the 8 AM schedule runs automatically.
+6. Publish/activate the workflow so the production webhook URL is registered.
+
+The daily GitHub trigger calls this n8n production webhook:
+
+```text
+https://suleman-linkedin-n8n.onrender.com/webhook/suleman-linkedin-daily-a8f7d41c9e6b4a2f9d0c
+```
+
+After activating the workflow in n8n, you can test the same URL in your browser. It should start the workflow and send the approval email.
 
 ## Free Automation Checklist
 
@@ -138,7 +146,8 @@ Your local n8n credentials do not automatically exist on Render. Reconnect them 
 - Set `GEMINI_API_KEY`.
 - Reconnect Google, Gmail, and LinkedIn credentials.
 - Import and activate the workflow.
-- The repo includes `.github/workflows/keep-render-awake.yml`, which pings n8n every 10 minutes and again at 7:50 AM Asia/Karachi.
+- The workflow is triggered by `.github/workflows/trigger-linkedin-automation.yml` at 8:00 AM Asia/Karachi. It calls the n8n production webhook directly and retries while Render wakes up.
+- The repo also includes `.github/workflows/keep-render-awake.yml`, which attempts periodic warm-up pings. GitHub does not guarantee exact timing for frequent scheduled pings, so the direct webhook trigger is the main free-tier workaround.
 - If your Render service URL is not `https://suleman-linkedin-n8n.onrender.com`, set this GitHub repository variable:
 
 ```text
@@ -147,7 +156,7 @@ RENDER_N8N_URL=https://your-real-render-host.onrender.com
 
 Add it in GitHub: `Settings` -> `Secrets and variables` -> `Actions` -> `Variables` -> `New repository variable`.
 
-This workaround is best-effort. GitHub scheduled workflows can occasionally run late, and Render can still cold-start slowly.
+This workaround is best-effort. GitHub scheduled workflows can occasionally run late, so the post may start a few minutes after 8 AM, but it should not depend on n8n already being awake.
 
 ## Production Checklist
 

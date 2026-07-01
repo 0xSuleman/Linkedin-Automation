@@ -14,15 +14,15 @@ The previous generated workflow filenames have also been updated to this same sh
 
 ## What It Does
 
-1. Runs daily at 8 AM.
+1. Runs from the GitHub Actions daily webhook trigger at 8 AM Asia/Karachi.
 2. Reads Google Sheet rows with `Status = Pending`.
 3. Selects the first pending row that has a non-empty `Image` URL.
 4. Sends only `Topic` and `Description` to Gemini.
-5. Gemini returns only the LinkedIn post text.
+5. Gemini returns the LinkedIn post text and a one-sentence infographic image description.
 6. Downloads the sheet `Image` URL as binary field `image`.
 7. Emails you the post text and downloaded image for approval.
 8. If approved, uploads that same binary image to LinkedIn.
-9. Publishes the LinkedIn post with text + image.
+9. Publishes the LinkedIn post with text + image, using the Gemini image description as LinkedIn alt text.
 10. Marks the sheet row as `Posted` or `Skipped`.
 
 ## Google Sheet Columns

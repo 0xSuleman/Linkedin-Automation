@@ -1,0 +1,50 @@
+name: Trigger LinkedIn Automation
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 8:00 AM Asia/Karachi = 3:00 AM UTC.
+    # This calls the n8n production webhook directly so Render can wake up
+    # and run the workflow even if the internal n8n scheduler was asleep.
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trigger-linkedin-automation
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Trigger n8n workflow webhook
+        env:
+          N8N_URL: ${{ vars.RENDER_N8N_URL || 'https://suleman-linkedin-n8n.onrender.com' }}
+          WEBHOOK_PATH: suleman-linkedin-daily-a8f7d41c9e6b4a2f9d0c
+        run: |
+          set -euo pipefail
+
+          base="${N8N_URL%/}"
+          webhook_url="${base}/webhook/${WEBHOOK_PATH}"
+
+          echo "Triggering ${webhook_url}"
+
+          for attempt in 1 2 3 4 5 6 7 8; do
+            code="$(curl -L -sS -o /tmp/n8n-trigger.txt -w '%{http_code}' --max-time 90 "${webhook_url}" || true)"
+            echo "Attempt ${attempt}: HTTP ${code}"
+
+            if [ "${code}" -ge 200 ] && [ "${code}" -lt 300 ]; then
+              echo "n8n webhook accepted the daily trigger."
+              exit 0
+            fi
+
+            # If Render is waking from sleep or n8n is booting, retry.
+            sleep 60
+          done
+
+          echo "n8n webhook did not accept the trigger. Last response:"
+          cat /tmp/n8n-trigger.txt || true
+          exit 1
