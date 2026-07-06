@@ -17,9 +17,9 @@ The previous generated workflow filenames have also been updated to this same sh
 1. Runs from the GitHub Actions daily webhook trigger at 8 AM Asia/Karachi.
 2. Reads Google Sheet rows with `Status = Pending`.
 3. Selects the first pending row that has a non-empty `Image` URL.
-4. Sends only `Topic` and `Description` to Gemini.
-5. Gemini returns the LinkedIn post text and a one-sentence infographic image description.
-6. Downloads the sheet `Image` URL as binary field `image`.
+4. Downloads and validates the sheet `Image` URL as binary field `image`.
+5. Sends `Topic`, `Description`, and the downloaded image to Gemini.
+6. Gemini returns LinkedIn post text that correlates with the image, plus a one-sentence infographic image description.
 7. Emails you the post text and downloaded image for approval.
 8. If approved, re-downloads the image URL after approval so Render/n8n cannot lose the binary file while waiting.
 9. Uploads that fresh binary image to LinkedIn.

@@ -83,14 +83,14 @@
     },
     {
       "parameters": {
-        "jsCode": "const row = $input.first().json;\nconst topic = String(row.Topic || row.topic || '').trim();\nconst description = String(row.Description || row.description || '').trim();\nconst imageUrl = String(row.Image || row.image || row['Image URL'] || row.image_url || '').trim();\nconst rowNumber = row.row_number || row.__rowNumber || row.rowIndex || row.row_index;\n\nif (!topic) throw new Error('Google Sheet row is missing Topic.');\nif (!imageUrl) throw new Error(`Google Sheet row for \"${topic}\" is missing Image URL. Add a public direct image URL in the Image column.`);\nif (!/^https?:\\/\\//i.test(imageUrl)) throw new Error(`Image URL for \"${topic}\" must start with http:// or https://. Got: ${imageUrl}`);\n\nconst prompt = [\n  'You are a system design educator posting on LinkedIn.',\n  `Topic: ${topic}`,\n  `Description: ${description}`,\n  '',\n  'Write a LinkedIn post.',\n  '- Start with a bold hook.',\n  '- Use clear comparisons with emojis as visual anchors.',\n  '- End with a question to drive comments.',\n  '- Also generate a 1-sentence image description for an infographic diagram.',\n  '- Keep the wording practical, clear, and comment-worthy for backend/system-design learners.',\n  '- Do not stop mid-section; every comparison you introduce must include its full explanation.',\n  '',\n  'Return ONLY valid JSON. No markdown fences. No commentary outside JSON.',\n  'JSON schema:',\n  '{ \"post_text\": \"Complete LinkedIn caption\", \"image_description\": \"One-sentence infographic diagram description\" }'\n].join('\\n');\n\nreturn [{\n  json: {\n    ...row,\n    row_number: rowNumber,\n    topic,\n    description,\n    image_url: imageUrl,\n    prompt,\n    requestBody: {\n      contents: [{ role: 'user', parts: [{ text: prompt }] }],\n      generationConfig: { temperature: 0.75, responseMimeType: 'application/json' }\n    }\n  }\n}];"
+        "jsCode": "const item = $input.first();\nconst row = item.json;\nconst topic = String(row.Topic || row.topic || '').trim();\nconst description = String(row.Description || row.description || '').trim();\nconst imageUrl = String(row.Image || row.image || row['Image URL'] || row.image_url || '').trim();\nconst rowNumber = row.row_number || row.__rowNumber || row.rowIndex || row.row_index;\nconst image = item.binary?.image;\n\nif (!topic) throw new Error('Google Sheet row is missing Topic.');\nif (!imageUrl) throw new Error(`Google Sheet row for \"${topic}\" is missing Image URL. Add a public direct image URL in the Image column.`);\nif (!/^https?:\\/\\//i.test(imageUrl)) throw new Error(`Image URL for \"${topic}\" must start with http:// or https://. Got: ${imageUrl}`);\nif (!image) throw new Error('Gemini image-aware post generation requires binary field \"image\" from the downloaded sheet image.');\n\nconst mimeType = String(image.mimeType || row.image_mime_type || 'image/jpeg').toLowerCase();\nif (!/image\\/(jpeg|jpg|png)/i.test(mimeType)) {\n  throw new Error(`Gemini image-aware post generation expects JPG/PNG. Got ${mimeType}.`);\n}\n\nconst imageBuffer = await this.helpers.getBinaryDataBuffer(0, 'image');\nconst imageBase64 = imageBuffer.toString('base64');\n\nconst prompt = [\n  'You are a system design educator posting on LinkedIn.',\n  `Topic: ${topic}`,\n  `Description: ${description}`,\n  '',\n  'Analyze the attached infographic image and make the LinkedIn post text match what the image actually shows.',\n  'Write a short, engaging LinkedIn post in the style of a practical system-design educator.',\n  '- Start with a strong hook on the first line. Make it bold in meaning, but do not use Markdown ** markers.',\n  '- Keep the post concise: 500 to 900 characters when possible.',\n  '- Use short paragraphs or bullet-style lines, not long blocks of text.',\n  '- Use clear comparisons with emojis as visual anchors.',\n  '- Focus on the most important 3 to 5 points from the image and topic.',\n  '- Make every point practical, specific, and easy to scan.',\n  '- Do not over-explain. Avoid filler and generic motivational wording.',\n  '- End with one engaging question that drives comments.',\n  '- Also generate a 1-sentence image description for an infographic diagram.',\n  '',\n  'Return ONLY valid JSON. No markdown fences. No commentary outside JSON.',\n  'JSON schema:',\n  '{ \"post_text\": \"Short concise LinkedIn caption that correlates with the attached image\", \"image_description\": \"One-sentence infographic diagram description\" }'\n].join('\\n');\n\nreturn [{\n  json: {\n    ...row,\n    row_number: rowNumber,\n    topic,\n    description,\n    image_url: imageUrl,\n    prompt,\n    gemini_image_mime_type: mimeType.includes('png') ? 'image/png' : 'image/jpeg',\n    requestBody: {\n      contents: [{\n        role: 'user',\n        parts: [\n          { text: prompt },\n          { inline_data: { mime_type: mimeType.includes('png') ? 'image/png' : 'image/jpeg', data: imageBase64 } }\n        ]\n      }],\n      generationConfig: { temperature: 0.75, responseMimeType: 'application/json' }\n    }\n  },\n  binary: item.binary\n}];"
       },
       "id": "83b741af-4bd2-483d-bc29-0a25508e7516",
       "name": "Build Gemini post request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -2200,
+        -1720,
         640
       ]
     },
@@ -123,7 +123,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -1960,
+        -1480,
         640
       ],
       "retryOnFail": true,
@@ -132,14 +132,14 @@
     },
     {
       "parameters": {
-        "jsCode": "const gemini = $input.first().json;\nconst source = $('Build Gemini post request').first().json;\n\nfunction extractTextFromGemini(value) {\n  if (value?.candidates?.[0]?.content?.parts) {\n    return value.candidates[0].content.parts.map(part => part.text || '').join('');\n  }\n  if (typeof value?.text === 'string') return value.text;\n  if (typeof value?.post_text === 'string') return JSON.stringify(value);\n  return JSON.stringify(value);\n}\n\nfunction stripJsonFence(value) {\n  return String(value || '')\n    .trim()\n    .replace(/^\\uFEFF/, '')\n    .replace(/^```(?:json)?\\s*/i, '')\n    .replace(/\\s*```$/i, '')\n    .trim();\n}\n\nfunction parseJsonObject(raw) {\n  const text = stripJsonFence(raw);\n  try { return JSON.parse(text); } catch (_) {}\n\n  const firstBrace = text.indexOf('{');\n  const lastBrace = text.lastIndexOf('}');\n  if (firstBrace !== -1 && lastBrace > firstBrace) {\n    const candidate = text.slice(firstBrace, lastBrace + 1);\n    try { return JSON.parse(candidate); } catch (_) {}\n  }\n\n  if (text.length >= 80) return { post_text: text };\n  throw new Error('Gemini did not return usable post text. Raw output: ' + text.slice(0, 1000));\n}\n\nfunction cleanPostText(value) {\n  return String(value || '')\n    .replace(/\\r\\n/g, '\\n')\n    .replace(/[\\u200B-\\u200D\\uFEFF]/g, '')\n    .replace(/[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]/g, '')\n    .replace(/^```[a-z]*\\n?/i, '')\n    .replace(/```$/i, '')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n}\n\nconst parsed = parseJsonObject(extractTextFromGemini(gemini));\nlet postText = cleanPostText(parsed.post_text || parsed.postText || parsed.caption || parsed.text || '');\n\nif (postText.length < 120) {\n  postText = `${source.topic}: the system-design trade-off most teams miss\\n\\nGreat architecture is rarely about one perfect tool. It is about choosing the right balance between latency, consistency, cost, and operational complexity.\\n\\nWhich trade-off would you choose first?`;\n}\n\nif (!/\\?\\s*(?:#[A-Za-z0-9_]+\\s*)*$/.test(postText)) {\n  postText = postText.replace(/\\s+$/, '') + '\\n\\nWhat trade-off would you choose first?';\n}\n\nconst emergencyLinkedInCap = 2800;\nif (postText.length > emergencyLinkedInCap) {\n  const questions = postText.match(/[^\\n.!?]*\\?/g) || [];\n  const question = cleanPostText(questions[questions.length - 1] || 'What trade-off would you choose first?');\n  const room = emergencyLinkedInCap - question.length - 2;\n  postText = postText.slice(0, room).replace(/\\n[^\\n]*$/, '').trim();\n  postText += '\\n\\n' + question;\n}\n\nlet imageDescription = cleanPostText(parsed.image_description || parsed.imageDescription || parsed.image_prompt || parsed.infographic_description || '');\nif (!imageDescription) {\n  imageDescription = `Infographic diagram explaining ${source.topic} with clear system-design comparisons and trade-offs.`;\n}\n\nreturn [{\n  json: {\n    topic: source.topic,\n    description: source.description,\n    image_url: source.image_url,\n    row_number: source.row_number,\n    post_text: postText,\n    post_text_length: postText.length,\n    image_description: imageDescription,\n    image_alt_text: imageDescription.slice(0, 120)\n  }\n}];"
+        "jsCode": "const gemini = $input.first().json;\nconst source = $('Build Gemini post request').first().json;\nconst downloaded = $('Prepare downloaded image').first();\n\nfunction extractTextFromGemini(value) {\n  if (value?.candidates?.[0]?.content?.parts) {\n    return value.candidates[0].content.parts.map(part => part.text || '').join('');\n  }\n  if (typeof value?.text === 'string') return value.text;\n  if (typeof value?.post_text === 'string') return JSON.stringify(value);\n  return JSON.stringify(value);\n}\n\nfunction stripJsonFence(value) {\n  return String(value || '')\n    .trim()\n    .replace(/^\\uFEFF/, '')\n    .replace(/^```(?:json)?\\s*/i, '')\n    .replace(/\\s*```$/i, '')\n    .trim();\n}\n\nfunction parseJsonObject(raw) {\n  const text = stripJsonFence(raw);\n  try { return JSON.parse(text); } catch (_) {}\n\n  const firstBrace = text.indexOf('{');\n  const lastBrace = text.lastIndexOf('}');\n  if (firstBrace !== -1 && lastBrace > firstBrace) {\n    const candidate = text.slice(firstBrace, lastBrace + 1);\n    try { return JSON.parse(candidate); } catch (_) {}\n  }\n\n  if (text.length >= 80) return { post_text: text };\n  throw new Error('Gemini did not return usable post text. Raw output: ' + text.slice(0, 1000));\n}\n\nfunction cleanPostText(value) {\n  return String(value || '')\n    .replace(/\\r\\n/g, '\\n')\n    .replace(/[\\u200B-\\u200D\\uFEFF]/g, '')\n    .replace(/[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]/g, '')\n    .replace(/^```[a-z]*\\n?/i, '')\n    .replace(/```$/i, '')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n}\n\nconst parsed = parseJsonObject(extractTextFromGemini(gemini));\nlet postText = cleanPostText(parsed.post_text || parsed.postText || parsed.caption || parsed.text || '');\n\nif (postText.length < 120) {\n  postText = `${source.topic}: the system-design trade-off most teams miss\\n\\nGreat architecture is rarely about one perfect tool. It is about choosing the right balance between latency, consistency, cost, and operational complexity.\\n\\nWhich trade-off would you choose first?`;\n}\n\nif (!/\\?\\s*(?:#[A-Za-z0-9_]+\\s*)*$/.test(postText)) {\n  postText = postText.replace(/\\s+$/, '') + '\\n\\nWhat trade-off would you choose first?';\n}\n\nconst emergencyLinkedInCap = 2800;\nif (postText.length > emergencyLinkedInCap) {\n  const questions = postText.match(/[^\\n.!?]*\\?/g) || [];\n  const question = cleanPostText(questions[questions.length - 1] || 'What trade-off would you choose first?');\n  const room = emergencyLinkedInCap - question.length - 2;\n  postText = postText.slice(0, room).replace(/\\n[^\\n]*$/, '').trim();\n  postText += '\\n\\n' + question;\n}\n\nlet imageDescription = cleanPostText(parsed.image_description || parsed.imageDescription || parsed.image_prompt || parsed.infographic_description || '');\nif (!imageDescription) {\n  imageDescription = `Infographic diagram explaining ${source.topic} with clear system-design comparisons and trade-offs.`;\n}\n\nreturn [{\n  json: {\n    ...downloaded.json,\n    topic: source.topic,\n    description: source.description,\n    image_url: source.image_url,\n    row_number: source.row_number,\n    post_text: postText,\n    post_text_length: postText.length,\n    image_description: imageDescription,\n    image_alt_text: imageDescription.slice(0, 120)\n  },\n  binary: downloaded.binary\n}];"
       },
       "id": "a5f50fa6-1a22-478f-8113-920d1975967d",
       "name": "Parse Gemini post text",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1720,
+        -1240,
         640
       ]
     },
@@ -181,7 +181,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -1480,
+        -2200,
         640
       ],
       "retryOnFail": true,
@@ -197,7 +197,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1240,
+        -1960,
         640
       ]
     },
@@ -918,7 +918,7 @@
       "main": [
         [
           {
-            "node": "Download sheet image",
+            "node": "Email approval preview",
             "type": "main",
             "index": 0
           }
@@ -940,7 +940,7 @@
       "main": [
         [
           {
-            "node": "Email approval preview",
+            "node": "Build Gemini post request",
             "type": "main",
             "index": 0
           }
@@ -1035,7 +1035,7 @@
       "main": [
         [
           {
-            "node": "Build Gemini post request",
+            "node": "Download sheet image",
             "type": "main",
             "index": 0
           }
