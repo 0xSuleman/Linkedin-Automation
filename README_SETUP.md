@@ -21,9 +21,10 @@ The previous generated workflow filenames have also been updated to this same sh
 5. Gemini returns the LinkedIn post text and a one-sentence infographic image description.
 6. Downloads the sheet `Image` URL as binary field `image`.
 7. Emails you the post text and downloaded image for approval.
-8. If approved, uploads that same binary image to LinkedIn.
-9. Publishes the LinkedIn post with text + image, using the Gemini image description as LinkedIn alt text.
-10. Marks the sheet row as `Posted` or `Skipped`.
+8. If approved, re-downloads the image URL after approval so Render/n8n cannot lose the binary file while waiting.
+9. Uploads that fresh binary image to LinkedIn.
+10. Publishes the LinkedIn post with text + image, using the Gemini image description as LinkedIn alt text.
+11. Marks the sheet row as `Posted` or `Skipped`.
 
 ## Google Sheet Columns
 
@@ -76,6 +77,7 @@ The Gemini HTTP Request node reads the API key from the `GEMINI_API_KEY` environ
 - Approval links are validated; only `approve` publishes and only `skip` marks the row skipped.
 - The LinkedIn profile is validated from `/v2/userinfo` before image upload or publishing.
 - The downloaded image is validated before approval email: it must be a direct JPG/PNG image and should be under 10MB.
+- The image is downloaded twice by design: once for the approval email and again after approval for LinkedIn upload. This avoids Render free-tier sleep/restart deleting n8n filesystem binary files while the workflow waits for your approval.
 - LinkedIn image upload uses `/rest/images?action=initializeUpload`, then binary upload to the returned `uploadUrl`.
 - LinkedIn publishing uses `/rest/posts` with the returned `urn:li:image:*` id.
 - The workflow sends an escaped copy of the caption to LinkedIn because `/rest/posts` treats characters like `(`, `)`, `[`, `]`, `*`, `_`, `#`, and `@` as reserved text-format characters. The approval email and sheet still show the normal unescaped caption.
