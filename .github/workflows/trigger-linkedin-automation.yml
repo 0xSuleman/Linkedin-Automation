@@ -6,7 +6,7 @@ on:
     # 8:00 AM Asia/Karachi = 3:00 AM UTC.
     # This calls the n8n production webhook directly so Render can wake up
     # and run the workflow even if the internal n8n scheduler was asleep.
-    - cron: "0 3 * * *"
+    - cron: "23 0 * * *"
 
 permissions:
   contents: read
