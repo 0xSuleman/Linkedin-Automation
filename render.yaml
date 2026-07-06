@@ -65,6 +65,12 @@ services:
         value: "false"
       - key: GEMINI_API_KEY
         sync: false
+      - key: APPROVAL_EMAIL
+        sync: false
+      - key: N8N_TRIGGER_TOKEN
+        sync: false
+      - key: N8N_BLOCK_ENV_ACCESS_IN_NODE
+        value: "false"
 
 databases:
   - name: suleman-linkedin-n8n-db

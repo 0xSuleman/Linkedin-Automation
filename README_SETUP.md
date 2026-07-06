@@ -58,7 +58,16 @@ The workflow already preserves your n8n credential references:
 - Gmail account
 - Linkedin
 
-The Gemini HTTP Request node reads the API key from the `GEMINI_API_KEY` environment variable. On Render, set this in the service environment variables using the key from `Credentials.txt`.
+The workflow reads sensitive values from Render environment variables:
+
+```text
+GEMINI_API_KEY
+APPROVAL_EMAIL
+N8N_TRIGGER_TOKEN
+N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+```
+
+Do not hardcode API keys, emails, or trigger secrets inside workflow nodes.
 
 ## Test One Post
 

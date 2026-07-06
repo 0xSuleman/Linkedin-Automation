@@ -76,9 +76,25 @@ In Render service environment variables, set:
 
 ```text
 GEMINI_API_KEY=your_google_ai_studio_key
+APPROVAL_EMAIL=your_email_address_for_approval_messages
+N8N_TRIGGER_TOKEN=a_long_random_secret_token
 ```
 
 Use the key from `Credentials.txt`, but do not commit that file.
+
+Generate `N8N_TRIGGER_TOKEN` locally with:
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Also set the same value as a GitHub Actions repository secret:
+
+```text
+N8N_TRIGGER_TOKEN=the_same_long_random_secret_token
+```
+
+GitHub path: `Settings` -> `Secrets and variables` -> `Actions` -> `Secrets` -> `New repository secret`.
 
 ## Configure OAuth Redirect URLs
 
@@ -132,18 +148,19 @@ Your local n8n credentials do not automatically exist on Render. Reconnect them 
 5. Approve the test post.
 6. Publish/activate the workflow so the production webhook URL is registered.
 
-The daily GitHub trigger calls this n8n production webhook:
+The daily GitHub trigger calls this n8n production webhook with a secret token:
 
 ```text
-https://suleman-linkedin-n8n.onrender.com/webhook/suleman-linkedin-daily-a8f7d41c9e6b4a2f9d0c
+https://suleman-linkedin-n8n.onrender.com/webhook/suleman-linkedin-daily-a8f7d41c9e6b4a2f9d0c?token=YOUR_N8N_TRIGGER_TOKEN
 ```
 
-After activating the workflow in n8n, you can test the same URL in your browser. It should start the workflow and send the approval email.
+After activating the workflow in n8n, you can test the same URL in your browser with the real token. Without the token, the workflow should reject the request.
 
 ## Free Automation Checklist
 
 - Deploy the Blueprint.
-- Set `GEMINI_API_KEY`.
+- Set `GEMINI_API_KEY`, `APPROVAL_EMAIL`, and `N8N_TRIGGER_TOKEN` in Render.
+- Set the same `N8N_TRIGGER_TOKEN` as a GitHub Actions secret.
 - Reconnect Google, Gmail, and LinkedIn credentials.
 - Import and activate the workflow.
 - The workflow is triggered by `.github/workflows/trigger-linkedin-automation.yml` at 8:00 AM Asia/Karachi. It calls the n8n production webhook directly and retries while Render wakes up.

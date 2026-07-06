@@ -24,13 +24,19 @@ jobs:
         env:
           N8N_URL: ${{ vars.RENDER_N8N_URL || 'https://suleman-linkedin-n8n.onrender.com' }}
           WEBHOOK_PATH: suleman-linkedin-daily-a8f7d41c9e6b4a2f9d0c
+          N8N_TRIGGER_TOKEN: ${{ secrets.N8N_TRIGGER_TOKEN }}
         run: |
           set -euo pipefail
 
           base="${N8N_URL%/}"
-          webhook_url="${base}/webhook/${WEBHOOK_PATH}"
+          if [ -z "${N8N_TRIGGER_TOKEN}" ]; then
+            echo "N8N_TRIGGER_TOKEN GitHub secret is not set."
+            exit 1
+          fi
 
-          echo "Triggering ${webhook_url}"
+          webhook_url="${base}/webhook/${WEBHOOK_PATH}?token=${N8N_TRIGGER_TOKEN}"
+
+          echo "Triggering ${base}/webhook/${WEBHOOK_PATH}"
 
           for attempt in 1 2 3 4 5 6 7 8; do
             code="$(curl -L -sS -o /tmp/n8n-trigger.txt -w '%{http_code}' --max-time 90 "${webhook_url}" || true)"

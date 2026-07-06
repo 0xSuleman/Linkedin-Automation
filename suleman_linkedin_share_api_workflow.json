@@ -55,7 +55,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        -2680,
+        -2440,
         640
       ],
       "credentials": {
@@ -77,7 +77,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -2440,
+        -2200,
         640
       ]
     },
@@ -90,7 +90,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1720,
+        -1480,
         640
       ]
     },
@@ -123,7 +123,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -1480,
+        -1240,
         640
       ],
       "retryOnFail": true,
@@ -139,7 +139,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1240,
+        -1000,
         640
       ]
     },
@@ -181,7 +181,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -2200,
+        -1960,
         640
       ],
       "retryOnFail": true,
@@ -197,13 +197,13 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1960,
+        -1720,
         640
       ]
     },
     {
       "parameters": {
-        "sendTo": "zsuleman437@gmail.com",
+        "sendTo": "={{ $env.APPROVAL_EMAIL }}",
         "subject": "=Approve LinkedIn post: {{ $json.topic }}",
         "message": "=<h2>LinkedIn post approval</h2><p><b>Topic:</b> {{ $json.topic }}</p><p><b>Image URL:</b> <a href='{{ $json.image_url }}'>Open source image</a></p><p><b>Image type:</b> {{ $json.image_mime_type }}</p><hr><pre style='font-family:Arial,sans-serif;white-space:pre-wrap;font-size:14px'>{{ $json.post_text }}</pre><hr><p>The downloaded sheet image is attached and will be uploaded to LinkedIn after approval.</p><p><a href='{{ $execution.resumeUrl }}&action=approve' style='background:#0a66c2;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:700'>Approve & Post</a> &nbsp; <a href='{{ $execution.resumeUrl }}&action=skip' style='color:#555'>Skip</a></p>",
         "options": {
@@ -221,7 +221,7 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        -1000,
+        -760,
         640
       ],
       "webhookId": "a0b9e4db-c0d3-4afe-95cb-b456dca0a58b",
@@ -247,7 +247,7 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        -760,
+        -520,
         640
       ],
       "webhookId": "b4f05b05-ba42-4ddd-9d13-4cf9d0c33540"
@@ -268,7 +268,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        -520,
+        -280,
         640
       ]
     },
@@ -593,7 +593,7 @@
     },
     {
       "parameters": {
-        "sendTo": "zsuleman437@gmail.com",
+        "sendTo": "={{ $env.APPROVAL_EMAIL }}",
         "subject": "Posted on LinkedIn: {{ $('Prepare LinkedIn image upload').first().json.topic }}",
         "message": "Your LinkedIn post with the sheet image was published successfully.",
         "options": {}
@@ -747,7 +747,7 @@
     },
     {
       "parameters": {
-        "sendTo": "zsuleman437@gmail.com",
+        "sendTo": "={{ $env.APPROVAL_EMAIL }}",
         "subject": "Skipped LinkedIn post",
         "message": "You skipped today's LinkedIn post. The Google Sheet row was marked as Skipped.",
         "options": {}
@@ -780,7 +780,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -640,
+        -400,
         640
       ]
     },
@@ -871,6 +871,19 @@
       "position": [
         -280,
         512
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst query = item.json.query || {};\nconst provided = String(query.token || query.secret || '').trim();\nconst expected = String($env.N8N_TRIGGER_TOKEN || '').trim();\nif (!expected) {\n  throw new Error('N8N_TRIGGER_TOKEN is not set in Render environment variables. Refusing public webhook trigger.');\n}\nif (!provided || provided !== expected) {\n  throw new Error('Unauthorized daily webhook trigger. Token is missing or invalid.');\n}\nreturn [{ json: { trigger_source: 'github_actions', trigger_authorized: true }, binary: item.binary }];"
+      },
+      "id": "22ad74ed-3827-4f8f-8241-210282584d96",
+      "name": "Validate GitHub trigger secret",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2680,
+        480
       ]
     }
   ],
@@ -1101,7 +1114,7 @@
       "main": [
         [
           {
-            "node": "Read pending topic",
+            "node": "Validate GitHub trigger secret",
             "type": "main",
             "index": 0
           }
@@ -1124,6 +1137,17 @@
         [
           {
             "node": "LinkedIn - get authenticated profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate GitHub trigger secret": {
+      "main": [
+        [
+          {
+            "node": "Read pending topic",
             "type": "main",
             "index": 0
           }
