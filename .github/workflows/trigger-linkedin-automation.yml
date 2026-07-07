@@ -34,12 +34,14 @@ jobs:
             exit 1
           fi
 
-          webhook_url="${base}/webhook/${WEBHOOK_PATH}?token=${N8N_TRIGGER_TOKEN}"
+          webhook_url="${base}/webhook/${WEBHOOK_PATH}"
 
           echo "Triggering ${base}/webhook/${WEBHOOK_PATH}"
 
           for attempt in 1 2 3 4 5 6 7 8; do
-            code="$(curl -L -sS -o /tmp/n8n-trigger.txt -w '%{http_code}' --max-time 90 "${webhook_url}" || true)"
+            code="$(curl -L -sS -o /tmp/n8n-trigger.txt -w '%{http_code}' --max-time 90 \
+              -H "X-N8N-Trigger-Token: ${N8N_TRIGGER_TOKEN}" \
+              "${webhook_url}" || true)"
             echo "Attempt ${attempt}: HTTP ${code}"
 
             if [ "${code}" -ge 200 ] && [ "${code}" -lt 300 ]; then
