@@ -1,14 +1,11 @@
-name: Keep Render n8n Awake
+name: Legacy Render n8n Health Check
 
 on:
   workflow_dispatch:
-  schedule:
-    # Render free web services sleep after inactivity. This ping creates
-    # inbound traffic often enough to keep the free n8n service warm.
-    - cron: "*/10 * * * *"
-    # Extra wake-up before the 8:00 AM Asia/Karachi n8n schedule.
-    # 7:50 AM PKT = 2:50 AM UTC.
-    - cron: "50 2 * * *"
+
+# This legacy health check is manual-only. Scheduled keep-alive traffic was
+# removed because it produced overlapping/cancelled runs without making the
+# sleeping free-tier n8n deployment reliable.
 
 permissions:
   contents: read
